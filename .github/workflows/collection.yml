@@ -1,0 +1,15 @@
+---
+name: Release and Deploy collection
+
+on:
+  push:
+
+jobs:
+  deploy:
+    runs-on: "ubuntu-20.04"
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build and Deploy collection
+        uses: artis3n/ansible_galaxy_collection@v2
+        with:
+          api_key: ${{ secrets.GALAXY_API_KEY }}
