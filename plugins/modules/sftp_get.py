@@ -80,7 +80,7 @@ options:
 
 EXAMPLES = r"""
 - name: Retrieve a single file via SFTP
-  mycompany.mymodules.sftp_get:
+  dtvillafana.general.sftp_get:
     host: 1.2.3.4
     username: foo
     password: bar
@@ -88,11 +88,22 @@ EXAMPLES = r"""
     local_path: '/local/path/'
 
 - name: Retrieve multiple files using globbing
-  mycompany.mymodules.sftp_get:
+  dtvillafana.general.sftp_get:
     host: 1.2.3.4
     username: foo
     password: bar
     remote_path: '/remote/path/*.txt'
+    local_path: '/local/path/'
+    host_key_algorithms:
+      - 'ssh-ed25519'
+      - 'ecdsa-sha2-nistp256'
+
+- name: Retrieve all files in a directory
+  dtvillafana.general.sftp_get:
+    host: 1.2.3.4
+    username: foo
+    password: bar
+    remote_path: '/remote/path/'
     local_path: '/local/path/'
     host_key_algorithms:
       - 'ssh-ed25519'
