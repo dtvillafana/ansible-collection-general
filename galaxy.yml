@@ -9,7 +9,7 @@ namespace: dtvillafana
 name: general
 
 # The version of the collection. Must be compatible with semantic versioning
-version: 1.0.6
+version: 1.0.7
 
 # The path to the Markdown (.md) readme file. This path is relative to the root of the collection
 readme: README.md
@@ -45,10 +45,10 @@ tags: []
 dependencies: {}
 
 # The URL of the originating SCM repository
-repository: https://github.com/dtvillafana/ansible-collection-general.git
+repository: https://github.com/dtvillafana/ansible-collection-general
 
 # The URL to any online docs
-documentation: https://github.com/dtvillafana/ansible-collection-general/blob/master/README.md
+documentation: https://github.com/dtvillafana/ansible-collection-general
 
 # The URL to the homepage of the collection/project
 homepage: https://github.com/dtvillafana/ansible-collection-general
