@@ -87,7 +87,7 @@ msg:
     description: The result message of the download operation
     type: str
     returned: always
-    sample: "list retrieved" or "directory empty"
+    sample: '"list retrieved" or "directory empty"'
 changed:
     description: Whether any local files were changed
     type: bool

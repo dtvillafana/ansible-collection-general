@@ -94,7 +94,7 @@ msg:
     description: The result message of the upload operation
     type: str
     returned: always
-    sample: "File uploaded successfully" or "File already exists at destination"
+    sample: '"File uploaded successfully" or "File already exists at destination"'
 changed:
     description: Whether the remote file was changed
     type: bool

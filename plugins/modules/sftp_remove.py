@@ -77,7 +77,7 @@ msg:
     description: The result message of the remove operation
     type: str
     returned: always
-    sample: "File successfully removed" or "File not found"
+    sample: '"File successfully removed" or "File not found"'
 '''
 
 from ansible.module_utils._text import to_native
