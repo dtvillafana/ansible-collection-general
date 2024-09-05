@@ -4,19 +4,6 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
-import os
-import hashlib
-from ansible.module_utils._text import to_native
-from ansible.module_utils.basic import AnsibleModule, missing_required_lib
-import fnmatch
-from typing import List, Dict, Any, Union
-
-try:
-    import paramiko
-
-    HAS_PARAMIKO = True
-except ImportError:
-    HAS_PARAMIKO = False
 
 __metaclass__ = type
 
@@ -127,6 +114,20 @@ downloaded_files:
     returned: always
     sample: ["/local/path/file1.txt", "/local/path/file2.txt"]
 """
+
+import os
+import hashlib
+from ansible.module_utils._text import to_native
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
+import fnmatch
+from typing import List, Dict, Any, Union
+
+try:
+    import paramiko
+
+    HAS_PARAMIKO = True
+except ImportError:
+    HAS_PARAMIKO = False
 
 
 def get_file_hash(file_obj: Any) -> str:

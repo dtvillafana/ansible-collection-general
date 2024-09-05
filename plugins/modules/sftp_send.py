@@ -4,17 +4,6 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
-import os
-import hashlib
-from ansible.module_utils._text import to_native, to_text
-from ansible.module_utils.basic import AnsibleModule, missing_required_lib
-
-try:
-    import paramiko
-
-    HAS_PARAMIKO = True
-except ImportError:
-    HAS_PARAMIKO = False
 
 __metaclass__ = type
 
@@ -110,6 +99,18 @@ changed:
     returned: always
     sample: true
 """
+
+import os
+import hashlib
+from ansible.module_utils._text import to_native, to_text
+from ansible.module_utils.basic import AnsibleModule, missing_required_lib
+
+try:
+    import paramiko
+
+    HAS_PARAMIKO = True
+except ImportError:
+    HAS_PARAMIKO = False
 
 
 def get_file_hash(file_obj):
