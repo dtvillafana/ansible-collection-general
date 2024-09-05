@@ -13,7 +13,9 @@ DOCUMENTATION = r'''
 module: sftp_get
 author: David Villafana
 
-short_description: Retrieve files from SFTP server to where Ansible runs.
+short_description: Retrieve files from SFTP server to where Ansible runs
+
+version_added: "1.0.0"
 
 description:
   - This module allows retrieving files using SFTP.

@@ -13,7 +13,9 @@ DOCUMENTATION = r'''
 module: sftp_remove
 author: David Villafana
 
-short_description: Remove a file from an SFTP server.
+short_description: Remove a file from an SFTP server
+
+version_added: "1.0.0"
 
 description:
   - This module allows removing a file from an SFTP server.

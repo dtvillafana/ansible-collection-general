@@ -13,7 +13,9 @@ DOCUMENTATION = r'''
 module: sftp_info
 author: David Villafana
 
-short_description: List files on remote SFTP server.
+short_description: List files on remote SFTP server
+
+version_added: "1.0.0"
 
 description:
   - This module allows listing files using SFTP.

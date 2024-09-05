@@ -13,7 +13,9 @@ DOCUMENTATION = r'''
 module: sftp_send
 author: David Villafana
 
-short_description: Send data directly to SFTP server from where ansible runs.
+short_description: Send data directly to SFTP server from where ansible runs
+
+version_added: "1.0.0"
 
 description:
   - This module allows sending files and text using SFTP.
