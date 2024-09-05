@@ -15,10 +15,10 @@ module: sftp_get
 short_description: Retrieve files from SFTP server to where Ansible runs
 
 description:
-  - This module allows retrieving files using SFTP.
-  - The module retrieves files to wherever the playbook is run.
-  - The module supports file globbing for retrieving multiple files (however, does not support pathname expansion, e.g. '**' characters).
-  - It checks if the file already exists at the destination with the same content before downloading.
+    - This module allows retrieving files using SFTP.
+    - The module retrieves files to wherever the playbook is run.
+    - The module supports file globbing for retrieving multiple files (however, does not support pathname expansion, e.g. '**' characters).
+    - It checks if the file already exists at the destination with the same content before downloading.
 
 version_added: "1.0.0"
 
@@ -106,7 +106,7 @@ msg:
     description: The result message of the download operation
     type: str
     returned: always
-    sample: "1 file(s) downloaded successfully" or "All files already exist at destination"
+    sample: '"1 file(s) downloaded successfully" or "All files already exist at destination"'
 changed:
     description: Whether any local files were changed
     type: bool
