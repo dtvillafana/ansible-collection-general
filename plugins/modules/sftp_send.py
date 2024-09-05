@@ -11,8 +11,7 @@ __metaclass__ = type
 DOCUMENTATION = r"""
 ---
 module: sftp_send
-author:
-  - David Villafaña <https://github.com/dtvillafana>
+author: David Villafaña <https://github.com/dtvillafana>
 
 short_description: Send data directly to SFTP server from where ansible runs.
 

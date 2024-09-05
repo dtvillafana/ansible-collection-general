@@ -11,8 +11,7 @@ __metaclass__ = type
 DOCUMENTATION = r"""
 ---
 module: sftp_info
-author:
-  - David Villafaña <https://github.com/dtvillafana>
+author: David Villafaña <https://github.com/dtvillafana>
 
 short_description: List files on remote SFTP server.
 
