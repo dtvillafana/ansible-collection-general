@@ -31,7 +31,7 @@ short_description: Retrieve files from SFTP server to where Ansible runs.
 description:
   - This module allows retrieving files using SFTP.
   - The module retrieves files to wherever the playbook is run.
-  - It supports file globbing for retrieving multiple files.
+  - The module supports file globbing for retrieving multiple files (however, does not support pathname expansion, e.g. '**' characters).
   - It checks if the file already exists at the destination with the same content before downloading.
 
 requirements:
