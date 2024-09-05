@@ -11,7 +11,7 @@ __metaclass__ = type
 DOCUMENTATION = r'''
 ---
 module: sftp_remove
-author: David Villafana <https://github.com/dtvillafana>
+author: David Villafana
 
 short_description: Remove a file from an SFTP server.
 

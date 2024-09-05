@@ -11,7 +11,7 @@ __metaclass__ = type
 DOCUMENTATION = r'''
 ---
 module: sftp_get
-author: David Villafaña <https://github.com/dtvillafana>
+author: David Villafana
 
 short_description: Retrieve files from SFTP server to where Ansible runs.
 
