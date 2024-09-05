@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r"""
+DOCUMENTATION = r'''
 ---
 module: sftp_get
 author: David Villafaña <https://github.com/dtvillafana>
@@ -63,9 +63,9 @@ options:
     required: False
     type: list
     elements: str
-"""
+'''
 
-EXAMPLES = r"""
+EXAMPLES = r'''
 - name: Retrieve a single file via SFTP
   dtvillafana.general.sftp_get:
     host: 1.2.3.4
@@ -95,9 +95,9 @@ EXAMPLES = r"""
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
-"""
+'''
 
-RETURN = r"""
+RETURN = r'''
 msg:
     description: The result message of the download operation
     type: str
@@ -113,7 +113,7 @@ downloaded_files:
     type: list
     returned: always
     sample: ["/local/path/file1.txt", "/local/path/file2.txt"]
-"""
+'''
 
 try:
     import paramiko
@@ -132,7 +132,7 @@ from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 
 
 def get_file_hash(file_obj: Any) -> str:
-    """Calculate MD5 hash of file object."""
+    '''Calculate MD5 hash of file object.'''
     hash_md5 = hashlib.md5()
     for chunk in iter(lambda: file_obj.read(4096), b""):
         hash_md5.update(chunk)
@@ -140,7 +140,7 @@ def get_file_hash(file_obj: Any) -> str:
 
 
 def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
-    """Get connection parameters for SSH client."""
+    '''Get connection parameters for SSH client.'''
     params = {
         "hostname": module.params["host"],
         "username": module.params["username"],
@@ -155,7 +155,7 @@ def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
 def get_remote_files(
     sftp: paramiko.SFTPClient, remote_path: str
 ) -> Union[List[str], str]:
-    """Get list of remote files based on the given path."""
+    '''Get list of remote files based on the given path.'''
     if any(char in remote_path for char in ["*", "?", "]", "["]):
         glob_expression = os.path.basename(remote_path)
         remote_dir = os.path.dirname(remote_path)
@@ -168,7 +168,7 @@ def get_remote_files(
 
 
 def validate_paths(module: AnsibleModule, remote_files: List[str]) -> None:
-    """Validate remote and local paths."""
+    '''Validate remote and local paths.'''
     if not remote_files:
         module.fail_json(msg=f"No files found matching {module.params['remote_path']}")
 
@@ -183,7 +183,7 @@ def validate_paths(module: AnsibleModule, remote_files: List[str]) -> None:
 def download_file(
     sftp: paramiko.SFTPClient, remote_file: str, local_file: str, remote_path: str
 ) -> bool:
-    """Download a single file if it doesn't exist or has different content."""
+    '''Download a single file if it doesn't exist or has different content.'''
     if os.path.exists(local_file):
         with open(local_file, "rb") as f:
             local_hash = get_file_hash(f)
@@ -199,7 +199,7 @@ def download_file(
 def process_files(
     module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: List[str]
 ) -> Dict[str, Any]:
-    """Process and download files."""
+    '''Process and download files.'''
     result = {"changed": False, "downloaded_files": []}
     remote_path = module.params["remote_path"]
     local_path = module.params["local_path"]
@@ -228,7 +228,7 @@ def process_files(
 
 
 def run_module(module: AnsibleModule) -> None:
-    """Main function to run the Ansible module."""
+    '''Main function to run the Ansible module.'''
     if not HAS_PARAMIKO:
         module.fail_json(msg=missing_required_lib("paramiko"))
 

@@ -8,10 +8,10 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r"""
+DOCUMENTATION = r'''
 ---
 module: sftp_info
-author: David Villafaña <https://github.com/dtvillafana>
+author: David Villafana <https://github.com/dtvillafana>
 
 short_description: List files on remote SFTP server.
 
@@ -56,9 +56,9 @@ options:
     required: False
     type: list
     elements: str
-"""
+'''
 
-EXAMPLES = r"""
+EXAMPLES = r'''
 - name: list files using globbing
   dtvillafana.general.sftp_info:
     host: 1.2.3.4
@@ -78,9 +78,9 @@ EXAMPLES = r"""
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
-"""
+'''
 
-RETURN = r"""
+RETURN = r'''
 msg:
     description: The result message of the download operation
     type: str
@@ -96,7 +96,7 @@ files:
     type: list
     returned: always
     sample: ["/local/path/file1.txt", "/local/path/file2.txt"]
-"""
+'''
 
 import os
 from ansible.module_utils._text import to_native
@@ -113,7 +113,7 @@ except ImportError:
 
 
 def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
-    """Get connection parameters for SSH client."""
+    '''Get connection parameters for SSH client.'''
     params = {
         "hostname": module.params["host"],
         "username": module.params["username"],
@@ -128,7 +128,7 @@ def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
 def get_remote_files(
     sftp: paramiko.SFTPClient, remote_path: str
 ) -> Union[List[str], str]:
-    """Get list of remote files based on the given path."""
+    '''Get list of remote files based on the given path.'''
     if any(char in remote_path for char in ["*", "?", "]", "["]):
         glob_expression = os.path.basename(remote_path)
         remote_dir = os.path.dirname(remote_path)
@@ -169,7 +169,7 @@ def get_remote_files(
 def process_files(
     module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: List[str]
 ) -> Dict[str, Any]:
-    """Process file list."""
+    '''Process file list.'''
     result = {"files": remote_files}
 
     result["msg"] = (
@@ -181,7 +181,7 @@ def process_files(
 
 
 def run_module(module: AnsibleModule) -> None:
-    """Main function to run the Ansible module."""
+    '''Main function to run the Ansible module.'''
     if not HAS_PARAMIKO:
         module.fail_json(msg=missing_required_lib("paramiko"))
 

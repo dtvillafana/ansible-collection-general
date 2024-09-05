@@ -8,10 +8,10 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r"""
+DOCUMENTATION = r'''
 ---
 module: sftp_send
-author: David Villafaña <https://github.com/dtvillafana>
+author: David Villafana <https://github.com/dtvillafana>
 
 short_description: Send data directly to SFTP server from where ansible runs.
 
@@ -64,9 +64,9 @@ options:
     required: False
     type: list
     elements: str
-"""
+'''
 
-EXAMPLES = r"""
+EXAMPLES = r'''
 - name: Send sftp file using string content
   ncstate.network.sftp_send:
       host: 1.2.3.4
@@ -85,9 +85,9 @@ EXAMPLES = r"""
       password: bar
       src: "/path/to/local/file.txt"
       dest_path: '/dest/file.txt'
-"""
+'''
 
-RETURN = r"""
+RETURN = r'''
 msg:
     description: The result message of the upload operation
     type: str
@@ -98,7 +98,7 @@ changed:
     type: bool
     returned: always
     sample: true
-"""
+'''
 
 import os
 import hashlib
@@ -114,7 +114,7 @@ except ImportError:
 
 
 def get_file_hash(file_obj):
-    """Calculate MD5 hash of file object."""
+    '''Calculate MD5 hash of file object.'''
     hash_md5 = hashlib.md5()
     for chunk in iter(lambda: file_obj.read(4096), b""):
         hash_md5.update(chunk)

@@ -8,10 +8,10 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r"""
+DOCUMENTATION = r'''
 ---
 module: sftp_remove
-author: David Villafaña <https://github.com/dtvillafana>
+author: David Villafana <https://github.com/dtvillafana>
 
 short_description: Remove a file from an SFTP server.
 
@@ -56,9 +56,9 @@ options:
     required: False
     type: list
     elements: str
-"""
+'''
 
-EXAMPLES = r"""
+EXAMPLES = r'''
 - name: Remove file from SFTP server
   sftp_remove:
     host: 1.2.3.4
@@ -68,15 +68,15 @@ EXAMPLES = r"""
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
-"""
+'''
 
-RETURN = r"""
+RETURN = r'''
 msg:
     description: The result message of the remove operation
     type: str
     returned: always
     sample: "File successfully removed" or "File not found"
-"""
+'''
 
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
