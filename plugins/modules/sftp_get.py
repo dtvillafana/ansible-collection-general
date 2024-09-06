@@ -52,7 +52,7 @@ options:
     type: str
   remote_path:
     description:
-    - The path to the source file or glob pattern on the remote server.
+    - The path to the source file or directory or glob pattern on the remote server.
     required: True
     type: str
   local_path:
@@ -112,7 +112,7 @@ changed:
     type: bool
     returned: always
     sample: true
-downloaded_files:
+files:
     description: List of files that were downloaded
     type: list
     returned: always
@@ -128,11 +128,11 @@ except ImportError:
 import os
 import hashlib
 import fnmatch
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any
+import traceback
 
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
-
 
 
 def get_file_hash(file_obj: Any) -> str:
@@ -156,28 +156,62 @@ def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
     return params
 
 
-def get_remote_files(
+def get_remote_paths(
     sftp: paramiko.SFTPClient, remote_path: str
-) -> Union[List[str], str]:
+) -> List[str]:
     '''Get list of remote files based on the given path.'''
+    remote_dir = os.path.dirname(remote_path)
     if any(char in remote_path for char in ["*", "?", "]", "["]):
         glob_expression = os.path.basename(remote_path)
-        remote_dir = os.path.dirname(remote_path)
-        all_files = sftp.listdir(remote_dir)
-        return fnmatch.filter(all_files, glob_expression)
+        attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_dir)
+        all_paths: List[str] = list(
+            map(
+                lambda x: os.path.join(remote_dir, x),
+                fnmatch.filter(
+                    map(
+                        lambda x: x.filename,
+                        filter(
+                            lambda x: str(x.longname).startswith("-"),
+                            attr_list),
+                    ),
+                    glob_expression)
+            )
+        )
+        return all_paths
     elif remote_path.endswith("/"):
-        return sftp.listdir(remote_path)
+        attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path)
+        return list(
+            map(
+                lambda x: os.path.join(remote_dir, x.filename),
+                filter(lambda x: str(x.longname).startswith("-"), attr_list),
+            )
+        )
+    elif str(sftp.lstat(remote_path)).startswith("-"):
+        return [remote_path]
     else:
-        return [os.path.basename(remote_path)]
+        attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path)
+        if list(
+            map(
+                lambda x: os.path.join(remote_path, x.filename),
+                filter(lambda x: str(x.longname).startswith("-"), attr_list),
+            )
+        ):
+            attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path + "/")
+            return list(
+                map(
+                    lambda x: os.path.join(remote_path, x.filename),
+                    filter(lambda x: str(x.longname).startswith("-"), attr_list),
+                )
+            )
 
 
-def validate_paths(module: AnsibleModule, remote_files: List[str]) -> None:
+def validate_paths(module: AnsibleModule, remote_paths: List[str]) -> None:
     '''Validate remote and local paths.'''
-    if not remote_files:
+    if not remote_paths:
         module.fail_json(msg=f"No files found matching {module.params['remote_path']}")
 
     if (
-        module.params["remote_path"].endswith("/") or len(remote_files) > 1
+        module.params["remote_path"].endswith("/") or len(remote_paths) > 1
     ) and not module.params["local_path"].endswith("/"):
         module.fail_json(
             msg=f"invalid local_path: {module.params['local_path']} -- local_path must be a directory string ending with '/' when multiple files would be retrieved"
@@ -185,46 +219,49 @@ def validate_paths(module: AnsibleModule, remote_files: List[str]) -> None:
 
 
 def download_file(
-    sftp: paramiko.SFTPClient, remote_file: str, local_file: str, remote_path: str
+    sftp: paramiko.SFTPClient, local_path: str, remote_path: str
 ) -> bool:
     '''Download a single file if it doesn't exist or has different content.'''
-    if os.path.exists(local_file):
-        with open(local_file, "rb") as f:
+    if os.path.exists(local_path) and os.path.isfile(local_path):
+        with open(local_path, "rb") as f:
             local_hash = get_file_hash(f)
-        with sftp.file(os.path.join(remote_path, remote_file), "rb") as f:
+        with sftp.file(remote_path, "rb") as f:
             remote_hash = get_file_hash(f)
         if local_hash == remote_hash:
             return False
 
-    sftp.get(os.path.join(remote_path, remote_file), local_file)
+    sftp.get(remotepath=remote_path, localpath=local_path)
     return True
 
 
 def process_files(
-    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: List[str]
+    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_paths: List[str]
 ) -> Dict[str, Any]:
     '''Process and download files.'''
-    result = {"changed": False, "downloaded_files": []}
+    result = {"changed": False, "files": []}
     remote_path = module.params["remote_path"]
     local_path = module.params["local_path"]
 
-    for remote_file in remote_files:
+    for remote_path in remote_paths:
+        remote_file: str = os.path.basename(remote_path)
         local_file = (
             os.path.join(local_path, remote_file)
-            if local_path.endswith("/")
-            else local_path
+            if
+            os.path.isdir(local_path)
+            else
+            local_path
         )
+        print(f"local_file: {local_file} - remote_path: {remote_path}")
         if download_file(
             sftp,
-            remote_file,
             local_file,
-            os.path.dirname(remote_path) if type(remote_files) is list else remote_path,
+            remote_path
         ):
             result["changed"] = True
-            result["downloaded_files"].append(local_file)
+            result["files"].append(local_file)
 
     result["msg"] = (
-        f"{len(result['downloaded_files'])} file(s) downloaded successfully"
+        f"{len(result['files'])} file(s) downloaded successfully"
         if result["changed"]
         else "All files already exist at destination with the same content"
     )
@@ -242,13 +279,14 @@ def run_module(module: AnsibleModule) -> None:
         ssh.connect(**get_connect_params(module))
 
         with ssh.open_sftp() as sftp:
-            remote_files = get_remote_files(sftp, module.params["remote_path"])
+            remote_files = get_remote_paths(sftp, module.params["remote_path"])
             validate_paths(module, remote_files)
             result = process_files(module, sftp, remote_files)
 
         module.exit_json(**result)
     except Exception as err:
-        module.fail_json(msg=f"Error occurred: {to_native(err)}")
+        stack_trace = traceback.format_exc()
+        module.fail_json(msg=f"Error occurred: {to_native(err)} -- target: {module.params['remote_path']} -- {stack_trace}")
 
 
 def main():

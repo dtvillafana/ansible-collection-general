@@ -150,6 +150,8 @@ def get_remote_files(
                 filter(lambda x: str(x.longname).startswith("-"), attr_list),
             )
         )
+    elif str(sftp.lstat(remote_path)).startswith("-"):
+        return [os.path.basename(remote_path)]
     else:
         attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path)
         if list(
@@ -165,7 +167,8 @@ def get_remote_files(
                     filter(lambda x: str(x.longname).startswith("-"), attr_list),
                 )
             )
-        return [os.path.basename(remote_path)]
+        else:
+            raise LookupError(f"Unhandled remote path value: {remote_path}")
 
 
 def process_files(
