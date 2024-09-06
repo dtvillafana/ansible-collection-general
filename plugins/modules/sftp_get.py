@@ -129,7 +129,6 @@ import os
 import hashlib
 import fnmatch
 from typing import List, Dict, Any
-import traceback
 
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
@@ -251,7 +250,6 @@ def process_files(
             else
             local_path
         )
-        print(f"local_file: {local_file} - remote_path: {remote_path}")
         if download_file(
             sftp,
             local_file,
@@ -285,8 +283,7 @@ def run_module(module: AnsibleModule) -> None:
 
         module.exit_json(**result)
     except Exception as err:
-        stack_trace = traceback.format_exc()
-        module.fail_json(msg=f"Error occurred: {to_native(err)} -- target: {module.params['remote_path']} -- {stack_trace}")
+        module.fail_json(msg=f"Error occurred: {to_native(err)} -- target: {module.params['remote_path']}")
 
 
 def main():
