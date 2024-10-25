@@ -3,6 +3,8 @@ name: Release and Deploy collection
 
 on:
   push:
+    branches:
+      - master
 
 jobs:
   deploy:
