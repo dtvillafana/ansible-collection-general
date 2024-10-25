@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r'''
+DOCUMENTATION = r"""
 ---
 module: sftp_get
 
@@ -19,6 +19,7 @@ description:
     - The module retrieves files to wherever the playbook is run.
     - The module supports file globbing for retrieving multiple files (however, does not support pathname expansion, e.g. '**' characters).
     - It checks if the file already exists at the destination with the same content before downloading.
+    - Supports both password and SSH key authentication methods.
 
 version_added: "1.0.0"
 
@@ -48,7 +49,19 @@ options:
   password:
     description:
     - The password for the connection.
-    required: True
+    - Required if private_key is not provided.
+    required: False
+    type: str
+  private_key:
+    description:
+    - Path to private key file for SSH key authentication.
+    - Required if password is not provided.
+    required: False
+    type: str
+  private_key_passphrase:
+    description:
+    - Passphrase for encrypted private key file.
+    required: False
     type: str
   remote_path:
     description:
@@ -67,10 +80,10 @@ options:
     required: False
     type: list
     elements: str
-'''
+"""
 
-EXAMPLES = r'''
-- name: Retrieve a single file via SFTP
+EXAMPLES = r"""
+- name: Retrieve a single file via SFTP using password authentication
   dtvillafana.general.sftp_get:
     host: 1.2.3.4
     username: foo
@@ -78,30 +91,28 @@ EXAMPLES = r'''
     remote_path: '/remote/path/file.txt'
     local_path: '/local/path/'
 
-- name: Retrieve multiple files using globbing
+- name: Retrieve multiple files using password protected SSH key
   dtvillafana.general.sftp_get:
     host: 1.2.3.4
     username: foo
-    password: bar
+    private_key: '/path/to/private_key'
+    private_key_passphrase: 'optional_passphrase'
     remote_path: '/remote/path/*.txt'
     local_path: '/local/path/'
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
 
-- name: Retrieve all files in a directory
+- name: Retrieve all files in a directory using SSH key
   dtvillafana.general.sftp_get:
     host: 1.2.3.4
     username: foo
-    password: bar
+    private_key: '/path/to/private_key'
     remote_path: '/remote/path/'
     local_path: '/local/path/'
-    host_key_algorithms:
-      - 'ssh-ed25519'
-      - 'ecdsa-sha2-nistp256'
-'''
+"""
 
-RETURN = r'''
+RETURN = r"""
 msg:
     description: The result message of the download operation
     type: str
@@ -117,7 +128,7 @@ files:
     type: list
     returned: always
     sample: ["/local/path/file1.txt", "/local/path/file2.txt"]
-'''
+"""
 
 try:
     import paramiko
@@ -126,54 +137,77 @@ try:
 except ImportError:
     HAS_PARAMIKO = False
 import os
+from io import StringIO
+from typing import IO
 import hashlib
 import fnmatch
-from typing import List, Dict, Any
 
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 
 
-def get_file_hash(file_obj: Any) -> str:
-    '''Calculate MD5 hash of file object.'''
+def get_file_hash(file_obj: any) -> str:
+    """Calculate MD5 hash of file object."""
     hash_md5 = hashlib.md5()
     for chunk in iter(lambda: file_obj.read(4096), b""):
         hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
 
-def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
-    '''Get connection parameters for SSH client.'''
+def get_connect_params(module: AnsibleModule) -> dict[str, any]:
+    """Get connection parameters for SSH client."""
     params = {
         "hostname": module.params["host"],
         "username": module.params["username"],
-        "password": module.params["password"],
         "port": module.params["port"],
     }
+
+    # Add authentication parameters based on method
+    if module.params["private_key"]:
+        try:
+            privkey_str: str = module.params["private_key"]
+            privkey_file: IO = (
+                StringIO(privkey_str)
+                if privkey_str.startswith("----")
+                else open(privkey_str, "r")
+            )
+            if module.params["private_key_passphrase"]:
+                pkey = paramiko.RSAKey.from_private_key(
+                    privkey_file, password=module.params["private_key_passphrase"]
+                )
+                privkey_file.close()
+            else:
+                pkey = paramiko.RSAKey.from_private_key(privkey_file)
+            params["pkey"] = pkey
+        except Exception as e:
+            module.fail_json(msg=f"Failed to load private key: {str(e)}")
+    elif module.params["password"]:
+        params["password"] = module.params["password"]
+    else:
+        module.fail_json(msg="Either password or private_key must be provided")
+
     if module.params["host_key_algorithms"]:
         params["server_host_key_algorithms"] = module.params["host_key_algorithms"]
+
     return params
 
 
-def get_remote_paths(
-    sftp: paramiko.SFTPClient, remote_path: str
-) -> List[str]:
-    '''Get list of remote files based on the given path.'''
+def get_remote_paths(sftp: paramiko.SFTPClient, remote_path: str) -> list[str]:
+    """Get list of remote files based on the given path."""
     remote_dir = os.path.dirname(remote_path)
     if any(char in remote_path for char in ["*", "?", "]", "["]):
         glob_expression = os.path.basename(remote_path)
         attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_dir)
-        all_paths: List[str] = list(
+        all_paths: list[str] = list(
             map(
                 lambda x: os.path.join(remote_dir, x),
                 fnmatch.filter(
                     map(
                         lambda x: x.filename,
-                        filter(
-                            lambda x: str(x.longname).startswith("-"),
-                            attr_list),
+                        filter(lambda x: str(x.longname).startswith("-"), attr_list),
                     ),
-                    glob_expression)
+                    glob_expression,
+                ),
             )
         )
         return all_paths
@@ -204,8 +238,8 @@ def get_remote_paths(
             )
 
 
-def validate_paths(module: AnsibleModule, remote_paths: List[str]) -> None:
-    '''Validate remote and local paths.'''
+def validate_paths(module: AnsibleModule, remote_paths: list[str]) -> None:
+    """Validate remote and local paths."""
     if not remote_paths:
         module.fail_json(msg=f"No files found matching {module.params['remote_path']}")
 
@@ -217,10 +251,8 @@ def validate_paths(module: AnsibleModule, remote_paths: List[str]) -> None:
         )
 
 
-def download_file(
-    sftp: paramiko.SFTPClient, local_path: str, remote_path: str
-) -> bool:
-    '''Download a single file if it doesn't exist or has different content.'''
+def download_file(sftp: paramiko.SFTPClient, local_path: str, remote_path: str) -> bool:
+    """Download a single file if it doesn't exist or has different content."""
     if os.path.exists(local_path) and os.path.isfile(local_path):
         with open(local_path, "rb") as f:
             local_hash = get_file_hash(f)
@@ -234,9 +266,9 @@ def download_file(
 
 
 def process_files(
-    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_paths: List[str]
-) -> Dict[str, Any]:
-    '''Process and download files.'''
+    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_paths: list[str]
+) -> dict[str, any]:
+    """Process and download files."""
     result = {"changed": False, "files": []}
     remote_path = module.params["remote_path"]
     local_path = module.params["local_path"]
@@ -245,16 +277,10 @@ def process_files(
         remote_file: str = os.path.basename(remote_path)
         local_file = (
             os.path.join(local_path, remote_file)
-            if
-            os.path.isdir(local_path)
-            else
-            local_path
+            if os.path.isdir(local_path)
+            else local_path
         )
-        if download_file(
-            sftp,
-            local_file,
-            remote_path
-        ):
+        if download_file(sftp, local_file, remote_path):
             result["changed"] = True
             result["files"].append(local_file)
 
@@ -267,7 +293,7 @@ def process_files(
 
 
 def run_module(module: AnsibleModule) -> None:
-    '''Main function to run the Ansible module.'''
+    """Main function to run the Ansible module."""
     if not HAS_PARAMIKO:
         module.fail_json(msg=missing_required_lib("paramiko"))
 
@@ -283,7 +309,9 @@ def run_module(module: AnsibleModule) -> None:
 
         module.exit_json(**result)
     except Exception as err:
-        module.fail_json(msg=f"Error occurred: {to_native(err)} -- target: {module.params['remote_path']}")
+        module.fail_json(
+            msg=f"Error occurred: {to_native(err)} -- target: {module.params['remote_path']}"
+        )
 
 
 def main():
@@ -291,13 +319,20 @@ def main():
         host=dict(type="str", required=True),
         port=dict(default=22, type="int"),
         username=dict(type="str", required=True),
-        password=dict(type="str", required=True, no_log=True),
+        password=dict(type="str", required=False, no_log=True),
+        private_key=dict(type="str", required=False, no_log=True),
+        private_key_passphrase=dict(type="str", required=False, no_log=True),
         remote_path=dict(type="str", required=True),
         local_path=dict(type="str", required=True),
         host_key_algorithms=dict(type="list", elements="str", required=False),
     )
 
-    module = AnsibleModule(argument_spec=spec, supports_check_mode=False)
+    module = AnsibleModule(
+        argument_spec=spec,
+        supports_check_mode=False,
+        mutually_exclusive=[["password", "private_key"]],
+        required_one_of=[["password", "private_key"]],
+    )
 
     if module.check_mode:
         module.exit_json(

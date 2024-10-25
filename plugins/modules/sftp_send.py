@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r'''
+DOCUMENTATION = r"""
 ---
 module: sftp_send
 author: David Villafana
@@ -21,6 +21,7 @@ description:
   - This module allows sending files and text using SFTP.
   - The module sends from wherever the playbook is run.
   - It checks if the file already exists at the destination with the same content before uploading. If read permissions are not granted, the file will be overwritten.
+    - Supports both password and SSH key authentication methods.
 
 requirements:
   - python paramiko
@@ -45,7 +46,19 @@ options:
   password:
     description:
     - The password for the connection.
-    required: True
+    - Required if private_key is not provided.
+    required: False
+    type: str
+  private_key:
+    description:
+    - Path to private key file for SSH key authentication.
+    - Required if password is not provided.
+    required: False
+    type: str
+  private_key_passphrase:
+    description:
+    - Passphrase for encrypted private key file.
+    required: False
     type: str
   src:
     description:
@@ -66,11 +79,11 @@ options:
     required: False
     type: list
     elements: str
-'''
+"""
 
-EXAMPLES = r'''
+EXAMPLES = r"""
 - name: Send sftp file using string content
-  ncstate.network.sftp_send:
+  dtvillafana.general.sftp_send:
       host: 1.2.3.4
       username: foo
       password: bar
@@ -80,16 +93,40 @@ EXAMPLES = r'''
         - 'ssh-ed25519'
         - 'ecdsa-sha2-nistp256'
 
-- name: Send sftp file using a local file path
-  ncstate.network.sftp_send:
+- name: send sftp file using a local file path
+  dtvillafana.general.sftp_send:
       host: 1.2.3.4
       username: foo
       password: bar
       src: "/path/to/local/file.txt"
       dest_path: '/dest/file.txt'
-'''
 
-RETURN = r'''
+- name: send file using SSH key
+  dtvillafana.general.sftp_send:
+    host: 1.2.3.4
+    username: foo
+    private_key: '/path/to/private_key'
+    private_key_passphrase: 'optional_passphrase'
+    dest_path: '/remote/path/file.txt'
+    src: '/local/path/file.txt'
+    host_key_algorithms:
+      - 'ssh-ed25519'
+      - 'ecdsa-sha2-nistp256'
+
+- name: send file using password protected SSH key
+  dtvillafana.general.sftp_send:
+    host: 1.2.3.4
+    username: foo
+    private_key: '/path/to/private_key'
+    private_key_passphrase: 'optional_passphrase'
+    dest_path: '/remote/path/file.txt'
+    src: '/local/path/file.txt'
+    host_key_algorithms:
+      - 'ssh-ed25519'
+      - 'ecdsa-sha2-nistp256'
+"""
+
+RETURN = r"""
 msg:
     description: The result message of the upload operation
     type: str
@@ -100,10 +137,12 @@ changed:
     type: bool
     returned: always
     sample: true
-'''
+"""
 
 import os
 import hashlib
+from io import StringIO
+from typing import IO
 from ansible.module_utils._text import to_native, to_text
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 
@@ -116,11 +155,49 @@ except ImportError:
 
 
 def get_file_hash(file_obj):
-    '''Calculate MD5 hash of file object.'''
+    """Calculate MD5 hash of file object."""
     hash_md5 = hashlib.md5()
     for chunk in iter(lambda: file_obj.read(4096), b""):
         hash_md5.update(chunk)
     return hash_md5.hexdigest()
+
+
+def get_connect_params(module: AnsibleModule) -> dict[str, any]:
+    """Get connection parameters for SSH client."""
+    params = {
+        "hostname": module.params["host"],
+        "username": module.params["username"],
+        "port": module.params["port"],
+    }
+
+    # Add authentication parameters based on method
+    if module.params["private_key"]:
+        try:
+            privkey_str: str = module.params["private_key"]
+            privkey_file: IO = (
+                StringIO(privkey_str)
+                if privkey_str.startswith("----")
+                else open(privkey_str, "r")
+            )
+            if module.params["private_key_passphrase"]:
+                pkey = paramiko.RSAKey.from_private_key(
+                    privkey_file, password=module.params["private_key_passphrase"]
+                )
+                privkey_file.close()
+            else:
+                pkey = paramiko.RSAKey.from_private_key(privkey_file)
+            params["pkey"] = pkey
+        except Exception as e:
+            module.fail_json(msg=f"Failed to load private key: {str(e)}")
+    elif module.params["password"]:
+        params["password"] = module.params["password"]
+    else:
+        module.fail_json(msg="Either password or private_key must be provided")
+
+    if module.params["host_key_algorithms"]:
+        params["server_host_key_algorithms"] = module.params["host_key_algorithms"]
+
+    return params
 
 
 def main():
@@ -129,13 +206,20 @@ def main():
         host=dict(type="str", required=True),
         port=dict(default=22, type="int"),
         username=dict(type="str", required=True),
-        password=dict(type="str", required=True, no_log=True),
+        password=dict(type="str", required=False, no_log=True),
+        private_key=dict(type="str", required=False, no_log=True),
+        private_key_passphrase=dict(type="str", required=False, no_log=True),
         src=dict(type="str", required=True),
         dest_path=dict(type="str", required=True),
         host_key_algorithms=dict(type="list", elements="str", required=False),
     )
 
-    module = AnsibleModule(argument_spec=spec, supports_check_mode=True)
+    module = AnsibleModule(
+        argument_spec=spec,
+        supports_check_mode=False,
+        mutually_exclusive=[["password", "private_key"]],
+        required_one_of=[["password", "private_key"]],
+    )
 
     if not HAS_PARAMIKO:
         module.fail_json(
@@ -164,17 +248,7 @@ def main():
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        connect_params = {
-            "hostname": module.params["host"],
-            "username": module.params["username"],
-            "password": module.params["password"],
-            "port": module.params["port"],
-        }
-
-        if module.params["host_key_algorithms"]:
-            connect_params["server_host_key_algorithms"] = module.params[
-                "host_key_algorithms"
-            ]
+        connect_params = get_connect_params(module=module)
 
         ssh.connect(**connect_params)
 
