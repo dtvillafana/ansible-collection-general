@@ -18,6 +18,7 @@
                     python3
                     python311Packages.paramiko
                     python311Packages.ansible-core
+                    python311Packages.black
                 ];
             };
         };

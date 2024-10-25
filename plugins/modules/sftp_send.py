@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r'''
+DOCUMENTATION = r"""
 ---
 module: sftp_send
 author: David Villafana
@@ -79,9 +79,9 @@ options:
     required: False
     type: list
     elements: str
-'''
+"""
 
-EXAMPLES = r'''
+EXAMPLES = r"""
 - name: Send sftp file using string content
   dtvillafana.general.sftp_send:
       host: 1.2.3.4
@@ -124,9 +124,9 @@ EXAMPLES = r'''
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
-'''
+"""
 
-RETURN = r'''
+RETURN = r"""
 msg:
     description: The result message of the upload operation
     type: str
@@ -137,7 +137,7 @@ changed:
     type: bool
     returned: always
     sample: true
-'''
+"""
 
 import os
 import hashlib
@@ -155,14 +155,15 @@ except ImportError:
 
 
 def get_file_hash(file_obj):
-    '''Calculate MD5 hash of file object.'''
+    """Calculate MD5 hash of file object."""
     hash_md5 = hashlib.md5()
     for chunk in iter(lambda: file_obj.read(4096), b""):
         hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+
 def get_connect_params(module: AnsibleModule) -> dict[str, any]:
-    '''Get connection parameters for SSH client.'''
+    """Get connection parameters for SSH client."""
     params = {
         "hostname": module.params["host"],
         "username": module.params["username"],
@@ -173,11 +174,14 @@ def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     if module.params["private_key"]:
         try:
             privkey_str: str = module.params["private_key"]
-            privkey_file: IO = StringIO(privkey_str) if privkey_str.startswith("----") else open(privkey_str, 'r')
+            privkey_file: IO = (
+                StringIO(privkey_str)
+                if privkey_str.startswith("----")
+                else open(privkey_str, "r")
+            )
             if module.params["private_key_passphrase"]:
                 pkey = paramiko.RSAKey.from_private_key(
-                    privkey_file,
-                    password=module.params["private_key_passphrase"]
+                    privkey_file, password=module.params["private_key_passphrase"]
                 )
                 privkey_file.close()
             else:
@@ -213,8 +217,8 @@ def main():
     module = AnsibleModule(
         argument_spec=spec,
         supports_check_mode=False,
-        mutually_exclusive=[['password', 'private_key']],
-        required_one_of=[['password', 'private_key']]
+        mutually_exclusive=[["password", "private_key"]],
+        required_one_of=[["password", "private_key"]],
     )
 
     if not HAS_PARAMIKO:

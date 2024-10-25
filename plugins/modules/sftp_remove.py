@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r'''
+DOCUMENTATION = r"""
 ---
 module: sftp_remove
 author: David Villafana
@@ -71,9 +71,9 @@ options:
     required: False
     type: list
     elements: str
-'''
+"""
 
-EXAMPLES = r'''
+EXAMPLES = r"""
 - name: Remove file from SFTP server
   sftp_remove:
     host: 1.2.3.4
@@ -101,15 +101,15 @@ EXAMPLES = r'''
     username: foo
     private_key: '/path/to/private_key'
     remote_path: '/remote/path/file.txt'
-'''
+"""
 
-RETURN = r'''
+RETURN = r"""
 msg:
     description: The result message of the remove operation
     type: str
     returned: always
     sample: '"File successfully removed" or "File not found"'
-'''
+"""
 
 from io import StringIO
 from typing import IO
@@ -125,7 +125,7 @@ except ImportError:
 
 
 def get_connect_params(module: AnsibleModule) -> dict[str, any]:
-    '''Get connection parameters for SSH client.'''
+    """Get connection parameters for SSH client."""
     params = {
         "hostname": module.params["host"],
         "username": module.params["username"],
@@ -136,11 +136,14 @@ def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     if module.params["private_key"]:
         try:
             privkey_str: str = module.params["private_key"]
-            privkey_file: IO = StringIO(privkey_str) if privkey_str.startswith("----") else open(privkey_str, 'r')
+            privkey_file: IO = (
+                StringIO(privkey_str)
+                if privkey_str.startswith("----")
+                else open(privkey_str, "r")
+            )
             if module.params["private_key_passphrase"]:
                 pkey = paramiko.RSAKey.from_private_key(
-                    privkey_file,
-                    password=module.params["private_key_passphrase"]
+                    privkey_file, password=module.params["private_key_passphrase"]
                 )
                 privkey_file.close()
             else:
@@ -175,8 +178,8 @@ def main():
     module = AnsibleModule(
         argument_spec=spec,
         supports_check_mode=False,
-        mutually_exclusive=[['password', 'private_key']],
-        required_one_of=[['password', 'private_key']]
+        mutually_exclusive=[["password", "private_key"]],
+        required_one_of=[["password", "private_key"]],
     )
 
     if not HAS_PARAMIKO:

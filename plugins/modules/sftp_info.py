@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-DOCUMENTATION = r'''
+DOCUMENTATION = r"""
 ---
 module: sftp_info
 author: David Villafana
@@ -71,9 +71,9 @@ options:
     required: False
     type: list
     elements: str
-'''
+"""
 
-EXAMPLES = r'''
+EXAMPLES = r"""
 - name: list files using globbing
   dtvillafana.general.sftp_info:
     host: 1.2.3.4
@@ -111,9 +111,9 @@ EXAMPLES = r'''
     username: foo
     private_key: '/path/to/private_key'
     remote_path: '/remote/path/files.*'
-'''
+"""
 
-RETURN = r'''
+RETURN = r"""
 msg:
     description: The result message of the download operation
     type: str
@@ -129,7 +129,7 @@ files:
     type: list
     returned: always
     sample: ["/local/path/file1.txt", "/local/path/file2.txt"]
-'''
+"""
 
 import os
 from io import StringIO
@@ -140,13 +140,14 @@ from typing import IO
 
 try:
     import paramiko
+
     has_paramiko = True
 except ImportError:
     has_paramiko = False
 
 
 def get_connect_params(module: AnsibleModule) -> dict[str, any]:
-    '''Get connection parameters for SSH client.'''
+    """Get connection parameters for SSH client."""
     params: dict[str, any] = {
         "hostname": module.params["host"],
         "username": module.params["username"],
@@ -157,11 +158,14 @@ def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     if module.params["private_key"]:
         try:
             privkey_str: str = module.params["private_key"]
-            privkey_file: IO = StringIO(privkey_str) if privkey_str.startswith("----") else open(privkey_str, 'r')
+            privkey_file: IO = (
+                StringIO(privkey_str)
+                if privkey_str.startswith("----")
+                else open(privkey_str, "r")
+            )
             if module.params["private_key_passphrase"]:
                 pkey = paramiko.RSAKey.from_private_key(
-                    privkey_file,
-                    password=module.params["private_key_passphrase"]
+                    privkey_file, password=module.params["private_key_passphrase"]
                 )
                 privkey_file.close()
             else:
@@ -179,10 +183,8 @@ def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     return params
 
 
-def get_remote_files(
-    sftp: paramiko.SFTPClient, remote_path: str
-) -> list[str] | str:
-    '''Get list of remote files based on the given path.'''
+def get_remote_files(sftp: paramiko.SFTPClient, remote_path: str) -> list[str] | str:
+    """Get list of remote files based on the given path."""
     if any(char in remote_path for char in ["*", "?", "]", "["]):
         glob_expression = os.path.basename(remote_path)
         remote_dir = os.path.dirname(remote_path)
@@ -226,7 +228,7 @@ def get_remote_files(
 def process_files(
     module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: list[str]
 ) -> dict[str, any]:
-    '''Process file list.'''
+    """Process file list."""
     result = {"files": remote_files}
 
     result["msg"] = (
@@ -238,7 +240,7 @@ def process_files(
 
 
 def run_module(module: AnsibleModule) -> None:
-    '''Main function to run the Ansible module.'''
+    """Main function to run the Ansible module."""
     if not has_paramiko:
         module.fail_json(msg=missing_required_lib("paramiko"))
 
@@ -271,8 +273,8 @@ def main():
     module = AnsibleModule(
         argument_spec=spec,
         supports_check_mode=False,
-        mutually_exclusive=[['password', 'private_key']],
-        required_one_of=[['password', 'private_key']]
+        mutually_exclusive=[["password", "private_key"]],
+        required_one_of=[["password", "private_key"]],
     )
 
     if module.check_mode:
