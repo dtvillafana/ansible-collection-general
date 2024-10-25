@@ -20,6 +20,7 @@ version_added: "1.0.0"
 description:
   - This module allows listing files using SFTP.
   - This module supports file globbing for listing multiple files (however, does not support pathname expansion, e.g. '**' characters).
+  - Supports both password and SSH key authentication methods.
 
 requirements:
   - python paramiko
@@ -44,7 +45,19 @@ options:
   password:
     description:
     - The password for the connection.
-    required: True
+    - Required if private_key is not provided.
+    required: False
+    type: str
+  private_key:
+    description:
+    - Path to private key file for SSH key authentication.
+    - Required if password is not provided.
+    required: False
+    type: str
+  private_key_passphrase:
+    description:
+    - Passphrase for encrypted private key file.
+    required: False
     type: str
   remote_path:
     description:
@@ -80,6 +93,24 @@ EXAMPLES = r'''
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
+
+- name: list files using password protected SSH key
+  dtvillafana.general.sftp_info:
+    host: 1.2.3.4
+    username: foo
+    private_key: '/path/to/private_key'
+    private_key_passphrase: 'optional_passphrase'
+    remote_path: '/remote/path/*.txt'
+    host_key_algorithms:
+      - 'ssh-ed25519'
+      - 'ecdsa-sha2-nistp256'
+
+- name: list files in a directory using SSH key
+  dtvillafana.general.sftp_info:
+    host: 1.2.3.4
+    username: foo
+    private_key: '/path/to/private_key'
+    remote_path: '/remote/path/files.*'
 '''
 
 RETURN = r'''
@@ -101,27 +132,48 @@ files:
 '''
 
 import os
+from io import StringIO
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 import fnmatch
-from typing import List, Dict, Any, Union
+from typing import IO
 
 try:
     import paramiko
-
-    HAS_PARAMIKO = True
+    has_paramiko = True
 except ImportError:
-    HAS_PARAMIKO = False
+    has_paramiko = False
 
 
-def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
+def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     '''Get connection parameters for SSH client.'''
-    params = {
+    params: dict[str, any] = {
         "hostname": module.params["host"],
         "username": module.params["username"],
-        "password": module.params["password"],
         "port": module.params["port"],
     }
+
+    # Add authentication parameters based on method
+    if module.params["private_key"]:
+        try:
+            privkey_str: str = module.params["private_key"]
+            privkey_file: IO = StringIO(privkey_str) if privkey_str.startswith("----") else open(privkey_str, 'r')
+            if module.params["private_key_passphrase"]:
+                pkey = paramiko.RSAKey.from_private_key(
+                    privkey_file,
+                    password=module.params["private_key_passphrase"]
+                )
+                privkey_file.close()
+            else:
+                pkey = paramiko.RSAKey.from_private_key(privkey_file)
+            params["pkey"] = pkey
+        except Exception as e:
+            module.fail_json(msg=f"Failed to load private key: {str(e)}")
+    elif module.params["password"]:
+        params["password"] = module.params["password"]
+    else:
+        module.fail_json(msg="Either password or private_key must be provided")
+
     if module.params["host_key_algorithms"]:
         params["server_host_key_algorithms"] = module.params["host_key_algorithms"]
     return params
@@ -129,13 +181,13 @@ def get_connect_params(module: AnsibleModule) -> Dict[str, Any]:
 
 def get_remote_files(
     sftp: paramiko.SFTPClient, remote_path: str
-) -> Union[List[str], str]:
+) -> list[str] | str:
     '''Get list of remote files based on the given path.'''
     if any(char in remote_path for char in ["*", "?", "]", "["]):
         glob_expression = os.path.basename(remote_path)
         remote_dir = os.path.dirname(remote_path)
         attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_dir)
-        all_files: List[str] = list(
+        all_files: list[str] = list(
             map(
                 lambda x: x.filename,
                 filter(lambda x: str(x.longname).startswith("-"), attr_list),
@@ -172,8 +224,8 @@ def get_remote_files(
 
 
 def process_files(
-    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: List[str]
-) -> Dict[str, Any]:
+    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: list[str]
+) -> dict[str, any]:
     '''Process file list.'''
     result = {"files": remote_files}
 
@@ -187,7 +239,7 @@ def process_files(
 
 def run_module(module: AnsibleModule) -> None:
     '''Main function to run the Ansible module.'''
-    if not HAS_PARAMIKO:
+    if not has_paramiko:
         module.fail_json(msg=missing_required_lib("paramiko"))
 
     try:
@@ -209,17 +261,24 @@ def main():
         host=dict(type="str", required=True),
         port=dict(default=22, type="int"),
         username=dict(type="str", required=True),
-        password=dict(type="str", required=True, no_log=True),
+        password=dict(type="str", required=False, no_log=True),
+        private_key=dict(type="str", required=False, no_log=True),
+        private_key_passphrase=dict(type="str", required=False, no_log=True),
         remote_path=dict(type="str", required=True),
         host_key_algorithms=dict(type="list", elements="str", required=False),
     )
 
-    module = AnsibleModule(argument_spec=spec, supports_check_mode=False)
+    module = AnsibleModule(
+        argument_spec=spec,
+        supports_check_mode=False,
+        mutually_exclusive=[['password', 'private_key']],
+        required_one_of=[['password', 'private_key']]
+    )
 
     if module.check_mode:
         module.exit_json(
             changed=False,
-            msg="Check mode not supported for file retrieval. Create a PR on the github repo if you want this functionality.",
+            msg="Check mode not supported for file retrieval. Open a PR on the github repo if you want this functionality.",
         )
 
     run_module(module)
