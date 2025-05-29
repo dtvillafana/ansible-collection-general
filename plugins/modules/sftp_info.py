@@ -125,18 +125,30 @@ changed:
     returned: always
     sample: true
 files:
-    description: List of files
+    description: List of file objects with detailed information
     type: list
     returned: always
-    sample: ["/local/path/file1.txt", "/local/path/file2.txt"]
+    sample: [
+        {
+            "full_path": "/remote/path/file1.txt",
+            "date": "2024-01-15T10:30:45Z",
+            "size_bytes": 1024
+        },
+        {
+            "full_path": "/remote/path/file2.txt",
+            "date": "2024-01-16T14:22:33Z",
+            "size_bytes": 2048
+        }
+    ]
 """
 
 import os
 from io import StringIO
+from datetime import datetime
 from ansible.module_utils._text import to_native
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 import fnmatch
-from typing import IO
+from typing import IO, Any
 
 try:
     import paramiko
@@ -146,9 +158,9 @@ except ImportError:
     has_paramiko = False
 
 
-def get_connect_params(module: AnsibleModule) -> dict[str, any]:
+def get_connect_params(module: AnsibleModule) -> dict[str, Any]:
     """Get connection parameters for SSH client."""
-    params: dict[str, any] = {
+    params: dict[str, Any] = {
         "hostname": module.params["host"],
         "username": module.params["username"],
         "port": module.params["port"],
@@ -183,51 +195,88 @@ def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     return params
 
 
-def get_remote_files(sftp: paramiko.SFTPClient, remote_path: str) -> list[str] | str:
-    """Get list of remote files based on the given path."""
+def create_file_object(
+    attr: paramiko.SFTPAttributes, full_path: str
+) -> dict[str, str | int | None]:
+    """Create a file object with the required attributes."""
+    # Convert Unix timestamp to ISO 8601 format
+    date_iso = datetime.fromtimestamp(attr.st_mtime).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    return {"full_path": full_path, "date": date_iso, "size_bytes": attr.st_size}
+
+
+def get_remote_files(
+    sftp: paramiko.SFTPClient, remote_path: str
+) -> list[dict[str, Any]]:
+    """Get list of remote file objects based on the given path."""
     if any(char in remote_path for char in ["*", "?", "]", "["]):
+        # Handle glob patterns
         glob_expression = os.path.basename(remote_path)
         remote_dir = os.path.dirname(remote_path)
-        attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_dir)
-        all_files: list[str] = list(
-            map(
-                lambda x: x.filename,
-                filter(lambda x: str(x.longname).startswith("-"), attr_list),
-            )
-        )
-        return fnmatch.filter(all_files, glob_expression)
+        attr_list = sftp.listdir_attr(remote_dir)
+
+        # Filter for regular files only
+        file_attrs = [attr for attr in attr_list if str(attr.longname).startswith("-")]
+
+        # Apply glob pattern matching
+        matching_files = []
+        for attr in file_attrs:
+            if fnmatch.fnmatch(attr.filename, glob_expression):
+                full_path = os.path.join(remote_dir, attr.filename).replace("\\", "/")
+                matching_files.append(create_file_object(attr, full_path))
+
+        return matching_files
+
     elif remote_path.endswith("/"):
-        attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path)
-        return list(
-            map(
-                lambda x: x.filename,
-                filter(lambda x: str(x.longname).startswith("-"), attr_list),
-            )
-        )
+        # Handle directory listing
+        attr_list = sftp.listdir_attr(remote_path)
+        file_objects = []
+
+        for attr in attr_list:
+            if str(attr.longname).startswith("-"):  # Regular files only
+                full_path = os.path.join(remote_path, attr.filename).replace("\\", "/")
+                file_objects.append(create_file_object(attr, full_path))
+
+        return file_objects
+
     elif str(sftp.lstat(remote_path)).startswith("-"):
-        return [os.path.basename(remote_path)]
+        # Handle single file
+        attr = sftp.lstat(remote_path)
+        return [create_file_object(attr, remote_path)]
+
     else:
-        attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path)
-        if list(
-            map(
-                lambda x: x.filename,
-                filter(lambda x: str(x.longname).startswith("-"), attr_list),
-            )
-        ):
-            attr_list: paramiko.SFTPAttributes = sftp.listdir_attr(remote_path + "/")
-            return list(
-                map(
-                    lambda x: x.filename,
-                    filter(lambda x: str(x.longname).startswith("-"), attr_list),
-                )
-            )
-        else:
+        # Handle directory without trailing slash
+        try:
+            attr_list = sftp.listdir_attr(remote_path)
+            file_objects = []
+
+            for attr in attr_list:
+                if str(attr.longname).startswith("-"):  # Regular files only
+                    full_path = os.path.join(remote_path, attr.filename).replace(
+                        "\\", "/"
+                    )
+                    file_objects.append(create_file_object(attr, full_path))
+
+            if file_objects:
+                return file_objects
+            else:
+                # Try with trailing slash
+                attr_list = sftp.listdir_attr(remote_path + "/")
+                for attr in attr_list:
+                    if str(attr.longname).startswith("-"):  # Regular files only
+                        full_path = os.path.join(remote_path, attr.filename).replace(
+                            "\\", "/"
+                        )
+                        file_objects.append(create_file_object(attr, full_path))
+                return file_objects
+
+        except Exception:
             raise LookupError(f"Unhandled remote path value: {remote_path}")
 
 
 def process_files(
-    module: AnsibleModule, sftp: paramiko.SFTPClient, remote_files: list[str]
-) -> dict[str, any]:
+    module: AnsibleModule, remote_files: list[dict[str, str | int | None]]
+) -> dict[str, list[dict[str, str | int | None]] | str]:
     """Process file list."""
     result = {"files": remote_files}
 
@@ -251,7 +300,7 @@ def run_module(module: AnsibleModule) -> None:
 
         with ssh.open_sftp() as sftp:
             remote_files = get_remote_files(sftp, module.params["remote_path"])
-            result = process_files(module, sftp, remote_files)
+            result = process_files(module, remote_files)
 
         module.exit_json(**result)
     except Exception as err:

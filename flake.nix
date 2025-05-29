@@ -15,10 +15,11 @@
             devShells.x86_64-linux.default = pkgs.mkShell {
                 buildInputs = with pkgs; [
                     openssl_3
-                    python3
-                    python311Packages.paramiko
-                    python311Packages.ansible-core
-                    python311Packages.black
+                    (python3.withPackages(p: with p; [
+                        paramiko
+                        ansible-core
+                        black
+                    ]))
                 ];
             };
         };
