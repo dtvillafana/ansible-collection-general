@@ -11,7 +11,6 @@ __metaclass__ = type
 DOCUMENTATION = r"""
 ---
 module: sftp_info
-author: David Villafana
 
 short_description: List files on remote SFTP server
 
@@ -22,8 +21,11 @@ description:
   - This module supports file globbing for listing multiple files (however, does not support pathname expansion, e.g. '**' characters).
   - Supports both password and SSH key authentication methods.
 
+author:
+  - David Villafana (@dtvillafana)
+
 requirements:
-  - python paramiko
+  - python paramiko<4.0
 
 options:
   host:
@@ -68,6 +70,7 @@ options:
     description:
     - List of allowed host key algorithms.
     - If not specified, Paramiko's default algorithms will be used.
+    - Supports legacy algorithms like 'ssh-dss' for older servers.
     required: False
     type: list
     elements: str
@@ -104,6 +107,16 @@ EXAMPLES = r"""
     host_key_algorithms:
       - 'ssh-ed25519'
       - 'ecdsa-sha2-nistp256'
+
+- name: connect to legacy server with ssh-dss
+  dtvillafana.general.sftp_info:
+    host: 1.2.3.4
+    username: foo
+    password: bar
+    remote_path: '/remote/path/file.txt'
+    host_key_algorithms:
+      - 'ssh-dss'
+      - 'ssh-rsa'
 
 - name: list files in a directory using SSH key
   dtvillafana.general.sftp_info:
@@ -152,15 +165,16 @@ from typing import IO, Any
 
 try:
     import paramiko
+    from paramiko.transport import Transport
 
     has_paramiko = True
 except ImportError:
     has_paramiko = False
 
 
-def get_connect_params(module: AnsibleModule) -> dict[str, Any]:
+def get_connect_params(module: AnsibleModule) -> dict[str, any]:
     """Get connection parameters for SSH client."""
-    params: dict[str, Any] = {
+    params = {
         "hostname": module.params["host"],
         "username": module.params["username"],
         "port": module.params["port"],
@@ -190,9 +204,17 @@ def get_connect_params(module: AnsibleModule) -> dict[str, Any]:
     else:
         module.fail_json(msg="Either password or private_key must be provided")
 
-    if module.params["host_key_algorithms"]:
-        params["server_host_key_algorithms"] = module.params["host_key_algorithms"]
     return params
+
+
+def configure_host_key_algorithms(ssh_client, host_key_algorithms):
+    """Configure host key algorithms for the SSH client."""
+    if host_key_algorithms:
+        # Get the transport object and configure host key algorithms
+        transport = ssh_client.get_transport()
+        if transport is not None:
+            # Set the preferred host key algorithms
+            transport.get_security_options().key_types = host_key_algorithms
 
 
 def create_file_object(
@@ -293,10 +315,45 @@ def run_module(module: AnsibleModule) -> None:
     if not has_paramiko:
         module.fail_json(msg=missing_required_lib("paramiko"))
 
+    sftp = None
+    transport = None
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(**get_connect_params(module))
+
+        # Configure host key algorithms before connecting if specified
+        if module.params["host_key_algorithms"]:
+            # Create a custom transport to set host key algorithms
+            transport = paramiko.Transport(
+                (module.params["host"], module.params["port"])
+            )
+
+            # Set the host key algorithms on the transport's security options
+            security_options = transport.get_security_options()
+            security_options.key_types = module.params["host_key_algorithms"]
+
+            # Start the transport
+            transport.start_client()
+
+            # Authenticate using the transport
+            connect_params = get_connect_params(module=module)
+
+            if "pkey" in connect_params:
+                transport.auth_publickey(
+                    connect_params["username"], connect_params["pkey"]
+                )
+            elif "password" in connect_params:
+                transport.auth_password(
+                    connect_params["username"], connect_params["password"]
+                )
+
+            # Create SFTP client from the transport
+            sftp = paramiko.SFTPClient.from_transport(transport)
+        else:
+            # Use standard connection method
+            connect_params = get_connect_params(module=module)
+            ssh.connect(**connect_params)
+            sftp = ssh.open_sftp()
 
         with ssh.open_sftp() as sftp:
             remote_files = get_remote_files(sftp, module.params["remote_path"])
@@ -305,6 +362,13 @@ def run_module(module: AnsibleModule) -> None:
         module.exit_json(**result)
     except Exception as err:
         module.fail_json(msg=f"Error occurred: {to_native(err)}")
+    finally:
+        if sftp:
+            sftp.close()
+        if module.params["host_key_algorithms"] and transport:
+            transport.close()
+        else:
+            ssh.close()
 
 
 def main():
