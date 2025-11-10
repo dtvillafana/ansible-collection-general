@@ -166,6 +166,8 @@ from typing import IO, Any
 try:
     import paramiko
     from paramiko.transport import Transport
+    from paramiko import SSHException
+
 
     has_paramiko = True
 except ImportError:
@@ -332,8 +334,12 @@ def run_module(module: AnsibleModule) -> None:
             security_options = transport.get_security_options()
             security_options.key_types = module.params["host_key_algorithms"]
 
-            # Start the transport
-            transport.start_client()
+            # single retry logic
+            try:
+                # Start the transport
+                transport.start_client()
+            except SSHException:
+                transport.start_client()
 
             # Authenticate using the transport
             connect_params = get_connect_params(module=module)
