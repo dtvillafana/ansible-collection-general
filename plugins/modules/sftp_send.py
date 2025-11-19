@@ -163,6 +163,7 @@ from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 try:
     import paramiko
     from paramiko.transport import Transport
+    from paramiko import SSHException
 
     HAS_PARAMIKO = True
 except ImportError:
@@ -268,6 +269,9 @@ def main():
     else:
         content = to_text(src).encode("utf-8")
 
+    sftp = None
+    transport = None
+    e: SSHException = SSHException("SSH failed to connect - generic")
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -285,7 +289,14 @@ def main():
             security_options.key_types = module.params["host_key_algorithms"]
 
             # Start the transport
-            transport.start_client()
+            for x in range(10):
+                try:
+                    # Start the transport
+                    transport.start_client()
+                    break
+                except Exception as err:
+                    e = err
+                    continue
 
             # Authenticate using the transport
             connect_params = get_connect_params(module=module)
@@ -304,41 +315,52 @@ def main():
         else:
             # Use standard connection method
             connect_params = get_connect_params(module=module)
-            ssh.connect(**connect_params)
+            for x in range(10):
+                try:
+                    # Start the transport
+                    ssh.connect(**connect_params)
+                    break
+                except Exception as err:
+                    e = err
+                    continue
             sftp = ssh.open_sftp()
 
-        try:
-            # Check if file exists and compare content
+        if sftp:
             try:
-                with sftp.file(module.params["dest_path"], "rb") as remote_file:
-                    remote_hash = get_file_hash(remote_file)
+                # Check if file exists and compare content
+                try:
+                    with sftp.file(module.params["dest_path"], "rb") as remote_file:
+                        remote_hash = get_file_hash(remote_file)
 
-                local_hash = hashlib.md5(content).hexdigest()
+                    local_hash = hashlib.md5(content).hexdigest()
 
-                if remote_hash == local_hash:
-                    result["msg"] = (
-                        "File already exists at destination with the same content."
-                    )
-                    module.exit_json(**result)
-            except IOError:
-                # File doesn't exist or read permissions not granted, continue with upload
-                pass
+                    if remote_hash == local_hash:
+                        result["msg"] = (
+                            "File already exists at destination with the same content."
+                        )
+                        module.exit_json(**result)
+                except IOError:
+                    # File doesn't exist or read permissions not granted, continue with upload
+                    pass
 
-            with sftp.file(module.params["dest_path"], "wb") as f:
-                f.write(content)
-            result["changed"] = True
-            result["msg"] = (
-                f"File uploaded successfully to {to_native(module.params['dest_path'])}"
-            )
-        except Exception as err:
-            module.fail_json(msg=f"SFTP upload failed: {to_native(err)}", **result)
-        finally:
-            if sftp:
-                sftp.close()
-            if module.params["host_key_algorithms"] and transport:
-                transport.close()
-            else:
-                ssh.close()
+                with sftp.file(module.params["dest_path"], "wb") as f:
+                    f.write(content)
+                result["changed"] = True
+                result["msg"] = (
+                    f"File uploaded successfully to {to_native(module.params['dest_path'])}"
+                )
+            except Exception as err:
+                module.fail_json(msg=f"SFTP upload failed: {to_native(err)}", **result)
+            finally:
+                if sftp:
+                    sftp.close()
+                if module.params["host_key_algorithms"] and transport:
+                    transport.close()
+                else:
+                    ssh.close()
+        else:
+            raise e
+
     except Exception as err:
         module.fail_json(msg=f"Client error occurred: {to_native(err)}", **result)
 
