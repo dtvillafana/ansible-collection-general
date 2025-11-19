@@ -132,6 +132,7 @@ from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 try:
     import paramiko
     from paramiko.transport import Transport
+    from paramiko import SSHException
 
     HAS_PARAMIKO = True
 except ImportError:
@@ -214,6 +215,9 @@ def main():
         result["msg"] = "Check mode not supported..."
         module.exit_json(**result)
 
+    sftp = None
+    transport = None
+    e: SSHException = SSHException("SSH failed to connect - generic")
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -232,7 +236,14 @@ def main():
             security_options.key_types = module.params["host_key_algorithms"]
 
             # Start the transport
-            transport.start_client()
+            for x in range(10):
+                try:
+                    # Start the transport
+                    transport.start_client()
+                    break
+                except Exception as err:
+                    e = err
+                    continue
 
             # Authenticate using the transport
             connect_params = get_connect_params(module=module)
@@ -251,13 +262,23 @@ def main():
         else:
             # Use standard connection method
             connect_params = get_connect_params(module=module)
-            ssh.connect(**connect_params)
+            for x in range(10):
+                try:
+                    # Start the transport
+                    ssh.connect(**connect_params)
+                    break
+                except Exception as err:
+                    e = err
+                    continue
             sftp = ssh.open_sftp()
 
         try:
-            sftp.remove(module.params["remote_path"])
-            result["changed"] = True
-            result["msg"] = f"File {module.params['remote_path']} successfully removed"
+            if sftp:
+                sftp.remove(module.params["remote_path"])
+                result["changed"] = True
+                result["msg"] = f"File {module.params['remote_path']} successfully removed"
+            else:
+                raise e
         except IOError as e:
             if e.errno == 2:  # No such file or directory
                 result["msg"] = f"File {module.params['remote_path']} not found"
@@ -266,8 +287,10 @@ def main():
                     msg=f"SFTP remove operation failed: {to_native(e)}", **result
                 )
         finally:
-            sftp.close()
+            if sftp:
+                sftp.close()
             ssh.close()
+
     except Exception as err:
         module.fail_json(msg=f"Client error occurred: {to_native(err)}", **result)
 

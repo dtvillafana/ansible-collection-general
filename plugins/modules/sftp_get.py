@@ -145,6 +145,7 @@ files:
 try:
     import paramiko
     from paramiko.transport import Transport
+    from paramiko import SSHException
 
     HAS_PARAMIKO = True
 except ImportError:
@@ -319,6 +320,7 @@ def run_module(module: AnsibleModule) -> None:
 
     transport = None
     sftp = None
+    e: SSHException = SSHException("SSH failed to connect - generic")
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -335,7 +337,14 @@ def run_module(module: AnsibleModule) -> None:
             security_options.key_types = module.params["host_key_algorithms"]
 
             # Start the transport
-            transport.start_client()
+            for x in range(10):
+                try:
+                    # Start the transport
+                    transport.start_client()
+                    break
+                except Exception as err:
+                    e = err
+                    continue
 
             # Authenticate using the transport
             connect_params = get_connect_params(module=module)
@@ -354,12 +363,22 @@ def run_module(module: AnsibleModule) -> None:
         else:
             # Use standard connection method
             connect_params = get_connect_params(module=module)
-            ssh.connect(**connect_params)
+            for x in range(10):
+                try:
+                    # Start the transport
+                    ssh.connect(**connect_params)
+                    break
+                except Exception as err:
+                    e = err
+                    continue
             sftp = ssh.open_sftp()
 
-        remote_files = get_remote_paths(sftp, module.params["remote_path"])
-        validate_paths(module, remote_files)
-        result = process_files(module, sftp, remote_files)
+        if sftp:
+            remote_files = get_remote_paths(sftp, module.params["remote_path"])
+            validate_paths(module, remote_files)
+            result = process_files(module, sftp, remote_files)
+        else:
+            raise e
 
         module.exit_json(**result)
     except Exception as err:
