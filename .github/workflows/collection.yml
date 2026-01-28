@@ -3,13 +3,23 @@ name: Release and Deploy collection
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*.*.*'
+      - '*.*.*'
 
 jobs:
   deploy:
-    runs-on: "ubuntu-22.04"
+    runs-on: "ubuntu-24.04"
     steps:
+      - name: Validate SemVer tag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          semver='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+          if [[ ! "$tag" =~ $semver ]]; then
+            echo "Invalid SemVer tag: $tag"
+            exit 1
+          fi
       - uses: actions/checkout@v2
       - name: Build and Deploy collection
         uses: artis3n/ansible_galaxy_collection@v2
