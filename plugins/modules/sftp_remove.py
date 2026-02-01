@@ -226,28 +226,31 @@ def main():
 
         # Configure host key algorithms before connecting if specified
         if module.params["host_key_algorithms"]:
-            # Create a custom transport to set host key algorithms
-            transport = paramiko.Transport(
-                (module.params["host"], module.params["port"])
-            )
-
-            # Set the host key algorithms on the transport's security options
-            security_options = transport.get_security_options()
-            security_options.key_types = module.params["host_key_algorithms"]
-
-            # Start the transport
             for x in range(10):
                 try:
+                    # Create a fresh transport on each attempt
+                    transport = paramiko.Transport(
+                        (module.params["host"], module.params["port"])
+                    )
+
+                    # Set the host key algorithms on the transport's security options
+                    security_options = transport.get_security_options()
+                    security_options.key_types = module.params["host_key_algorithms"]
+
                     # Start the transport
                     transport.start_client()
                     break
                 except Exception as err:
                     e = err
+                    if transport:
+                        transport.close()
+                        transport = None
                     continue
 
-            # Authenticate using the transport
-            connect_params = get_connect_params(module=module)
+            if transport is None or not transport.is_active():
+                raise e
 
+            # Authenticate using the transport
             if "pkey" in connect_params:
                 transport.auth_publickey(
                     connect_params["username"], connect_params["pkey"]
@@ -261,10 +264,8 @@ def main():
             sftp = paramiko.SFTPClient.from_transport(transport)
         else:
             # Use standard connection method
-            connect_params = get_connect_params(module=module)
             for x in range(10):
                 try:
-                    # Start the transport
                     ssh.connect(**connect_params)
                     break
                 except Exception as err:
