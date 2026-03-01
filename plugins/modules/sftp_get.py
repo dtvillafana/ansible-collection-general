@@ -374,6 +374,10 @@ def run_module(module: AnsibleModule) -> None:
                 except Exception as err:
                     e = err
                     continue
+
+            if not ssh.get_transport() or not ssh.get_transport().is_active():
+                raise e
+
             sftp = ssh.open_sftp()
 
         if sftp:
