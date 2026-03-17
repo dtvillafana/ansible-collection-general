@@ -168,7 +168,6 @@ try:
     from paramiko.transport import Transport
     from paramiko import SSHException
 
-
     has_paramiko = True
 except ImportError:
     has_paramiko = False

@@ -277,7 +277,9 @@ def main():
             if sftp:
                 sftp.remove(module.params["remote_path"])
                 result["changed"] = True
-                result["msg"] = f"File {module.params['remote_path']} successfully removed"
+                result["msg"] = (
+                    f"File {module.params['remote_path']} successfully removed"
+                )
             else:
                 raise e
         except IOError as e:
