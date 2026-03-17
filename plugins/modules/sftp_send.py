@@ -155,7 +155,7 @@ changed:
 
 import os
 import hashlib
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import IO
 from ansible.module_utils._text import to_native, to_text
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
@@ -345,8 +345,7 @@ def main():
                     # File doesn't exist or read permissions not granted, continue with upload
                     pass
 
-                with sftp.file(module.params["dest_path"], "wb") as f:
-                    f.write(content)
+                sftp.putfo(BytesIO(content), module.params["dest_path"])
                 result["changed"] = True
                 result["msg"] = (
                     f"File uploaded successfully to {to_native(module.params['dest_path'])}"
