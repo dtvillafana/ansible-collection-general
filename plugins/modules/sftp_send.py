@@ -258,6 +258,7 @@ def main():
         )
 
     src = module.params["src"]
+    content_type: str = "File"
     if os.path.isfile(src):
         try:
             with open(src, "rb") as f:
@@ -268,6 +269,7 @@ def main():
             )
     else:
         content = to_text(src).encode("utf-8")
+        content_type = "String content"
 
     sftp = None
     transport = None
@@ -348,7 +350,7 @@ def main():
                 sftp.putfo(BytesIO(content), module.params["dest_path"], confirm=False)
                 result["changed"] = True
                 result["msg"] = (
-                    f"File uploaded successfully to {to_native(module.params['dest_path'])}"
+                    f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
                 )
             except Exception as err:
                 module.fail_json(msg=f"SFTP upload failed: {to_native(err)}", **result)
