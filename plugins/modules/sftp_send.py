@@ -347,7 +347,10 @@ def main():
                     # File doesn't exist or read permissions not granted, continue with upload
                     pass
 
-                sftp.putfo(BytesIO(content), module.params["dest_path"], confirm=False)
+                with sftp.file(module.params["dest_path"], "wb") as remote_file:
+                    remote_file.set_pipelined(False)
+                    remote_file.write(content)
+                    remote_file.flush()
                 result["changed"] = True
                 result["msg"] = (
                     f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
