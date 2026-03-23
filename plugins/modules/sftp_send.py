@@ -353,7 +353,17 @@ def main():
                     # File doesn't exist or read permissions not granted, continue with upload
                     pass
 
+                # Remove existing file before upload (if it exists)
+                try:
+                    sftp.remove(dest_path)
+                except IOError:
+                    pass
+
+                # Use "x" (exclusive create) since this server rejects TRUNC flag.
+                # Paramiko bug: "x" mode sets SFTP write flag but not BufferedFile
+                # write flag, so we set it manually to allow .write() calls.
                 with sftp.open(dest_path, "x") as remote_file:
+                    remote_file._flags |= remote_file.FLAG_WRITE
                     remote_file.set_pipelined(True)
                     remote_file.write(content)
                 result["changed"] = True
