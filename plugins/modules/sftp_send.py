@@ -359,7 +359,11 @@ def main():
                     f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
                 )
             except Exception as err:
-                module.fail_json(msg=f"SFTP upload failed: {to_native(err)}", **result)
+                module.fail_json(
+                    msg=f"SFTP upload failed: {to_native(err)}",
+                    path=dest_path,
+                    **result,
+                )
             finally:
                 if sftp:
                     sftp.close()
