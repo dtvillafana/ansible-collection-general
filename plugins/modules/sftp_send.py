@@ -361,6 +361,7 @@ def main():
             except Exception as err:
                 module.fail_json(
                     msg=f"SFTP upload failed: {to_native(err)}",
+                    paramiko_version=paramiko._version,
                     path=dest_path,
                     **result,
                 )
