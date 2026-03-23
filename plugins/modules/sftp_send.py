@@ -271,7 +271,7 @@ def main():
         content = to_text(src).encode("utf-8")
         content_type = "String content"
 
-    sftp = None
+    sftp: None | paramiko.SFTPClient = None
     transport = None
     e: SSHException = SSHException("SSH failed to connect - generic")
     try:
@@ -327,7 +327,7 @@ def main():
                 except Exception as err:
                     e = err
                     continue
-            sftp = ssh.open_sftp()
+            sftp: paramiko.SFTPClient = ssh.open_sftp()
 
         if sftp:
             try:
@@ -364,8 +364,9 @@ def main():
                 # write flag, so we set it manually to allow .write() calls.
                 with sftp.open(dest_path, "x") as remote_file:
                     remote_file._flags |= remote_file.FLAG_WRITE
-                    remote_file.set_pipelined(True)
+                    remote_file.set_pipelined(False)
                     remote_file.write(content)
+                    remote_file.flush()
                 result["changed"] = True
                 result["msg"] = (
                     f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
