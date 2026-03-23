@@ -331,9 +331,15 @@ def main():
 
         if sftp:
             try:
+                # Resolve dest_path to an absolute remote path
+                dest_path = module.params["dest_path"]
+                if not dest_path.startswith("/"):
+                    cwd = sftp.normalize(".")
+                    dest_path = cwd.rstrip("/") + "/" + dest_path
+
                 # Check if file exists and compare content
                 try:
-                    with sftp.file(module.params["dest_path"], "rb") as remote_file:
+                    with sftp.file(dest_path, "rb") as remote_file:
                         remote_hash = get_file_hash(remote_file)
 
                     local_hash = hashlib.md5(content).hexdigest()
@@ -347,10 +353,7 @@ def main():
                     # File doesn't exist or read permissions not granted, continue with upload
                     pass
 
-                with sftp.file(module.params["dest_path"], "wb") as remote_file:
-                    remote_file.set_pipelined(False)
-                    remote_file.write(content)
-                    remote_file.flush()
+                sftp.putfo(BytesIO(content), dest_path, confirm=False)
                 result["changed"] = True
                 result["msg"] = (
                     f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
