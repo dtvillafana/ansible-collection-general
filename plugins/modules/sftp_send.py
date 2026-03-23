@@ -353,7 +353,7 @@ def main():
                     # File doesn't exist or read permissions not granted, continue with upload
                     pass
 
-                sftp.putfo(BytesIO(content), dest_path, confirm=False)
+                sftp.putfo(BytesIO(content), dest_path, confirm=True)
                 result["changed"] = True
                 result["msg"] = (
                     f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
