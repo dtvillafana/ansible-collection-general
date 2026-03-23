@@ -331,11 +331,7 @@ def main():
 
         if sftp:
             try:
-                # Resolve dest_path to an absolute remote path
                 dest_path = module.params["dest_path"]
-                if not dest_path.startswith("/"):
-                    cwd = sftp.normalize(".")
-                    dest_path = cwd.rstrip("/") + "/" + dest_path
 
                 # Check if file exists and compare content
                 try:
@@ -353,20 +349,12 @@ def main():
                     # File doesn't exist or read permissions not granted, continue with upload
                     pass
 
-                # Remove existing file before upload (if it exists)
-                try:
-                    sftp.remove(dest_path)
-                except IOError:
-                    pass
+# Resolve to absolute path
+                if not dest_path.startswith("/"):
+                    dest_path = sftp.normalize(".").rstrip("/") + "/" + dest_path
 
-                # Use "x" (exclusive create) since this server rejects TRUNC flag.
-                # Paramiko bug: "x" mode sets SFTP write flag but not BufferedFile
-                # write flag, so we set it manually to allow .write() calls.
-                with sftp.open(dest_path, "x") as remote_file:
-                    remote_file._flags |= remote_file.FLAG_WRITE
-                    remote_file.set_pipelined(False)
-                    remote_file.write(content)
-                    remote_file.flush()
+                # Upload file
+                sftp.putfo(BytesIO(content), dest_path)
                 result["changed"] = True
                 result["msg"] = (
                     f"{content_type} uploaded successfully to {to_native(module.params['dest_path'])}"
