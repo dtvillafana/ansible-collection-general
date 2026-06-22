@@ -1,2 +1,3 @@
 .direnv/
 *.json
+__pycache__/
