@@ -155,6 +155,7 @@ changed:
 
 import os
 import hashlib
+import time
 from io import BytesIO, StringIO
 from typing import IO
 from ansible.module_utils._text import to_native, to_text
@@ -223,6 +224,50 @@ def configure_host_key_algorithms(ssh_client, host_key_algorithms):
             transport.get_security_options().key_types = host_key_algorithms
 
 
+def create_ssh_client():
+    """Create an SSH client with the module's default host key policy."""
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    return ssh
+
+
+def connect_ssh_client(ssh, connect_params, attempts=1):
+    """Connect an SSH client and verify Paramiko created an active transport."""
+    err = SSHException("SSH failed to connect - generic")
+    for _ in range(attempts):
+        try:
+            ssh.connect(**connect_params)
+            transport = ssh.get_transport()
+            if transport and transport.is_active():
+                return None
+            err = SSHException("SSH connected without an active transport")
+        except Exception as connect_err:
+            err = connect_err
+
+    return err
+
+
+def open_sftp_with_refresh(ssh, connect_params, attempts=10, delay=3):
+    """Open SFTP, refreshing the SSH client between retry attempts."""
+    err = SSHException("SSH failed to connect - generic")
+    for attempt in range(attempts):
+        try:
+            connect_err = connect_ssh_client(ssh, connect_params)
+            if connect_err is not None:
+                raise connect_err
+
+            return ssh, ssh.open_sftp()
+        except Exception as attempt_err:
+            err = attempt_err
+            ssh.close()
+            if attempt == attempts - 1:
+                break
+            time.sleep(delay)
+            ssh = create_ssh_client()
+
+    raise err
+
+
 def main():
 
     spec = dict(
@@ -273,10 +318,10 @@ def main():
 
     sftp: None | paramiko.SFTPClient = None
     transport = None
+    ssh = None
     e: SSHException = SSHException("SSH failed to connect - generic")
     try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh = create_ssh_client()
 
         connect_params = get_connect_params(module=module)
 
@@ -320,14 +365,7 @@ def main():
             sftp = paramiko.SFTPClient.from_transport(transport)
         else:
             # Use standard connection method
-            for x in range(10):
-                try:
-                    ssh.connect(**connect_params)
-                    break
-                except Exception as err:
-                    e = err
-                    continue
-            sftp: paramiko.SFTPClient = ssh.open_sftp()
+            ssh, sftp = open_sftp_with_refresh(ssh, connect_params)
 
         if sftp:
             try:
@@ -366,18 +404,18 @@ def main():
                     path=dest_path,
                     **result,
                 )
-            finally:
-                if sftp:
-                    sftp.close()
-                if module.params["host_key_algorithms"] and transport:
-                    transport.close()
-                else:
-                    ssh.close()
         else:
             raise e
 
     except Exception as err:
         module.fail_json(msg=f"Client error occurred: {to_native(err)}", **result)
+    finally:
+        if sftp:
+            sftp.close()
+        if transport:
+            transport.close()
+        if ssh:
+            ssh.close()
 
     module.exit_json(**result)
 
